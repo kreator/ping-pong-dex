@@ -1,0 +1,26 @@
+{
+  "name": "ping-pong-dex",
+  "version": "1.0.0",
+  "description": "A decentralized manipulation resistant exchange",
+  "main": "truffle-config.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "pretty-all": "prettier --write contracts/**/*.sol",
+    "pretty": "prettier --write"
+  },
+  "author": "svechinsky",
+  "license": "ISC",
+  "dependencies": {
+    "openzeppelin-solidity": "git://github.com/OpenZeppelin/openzeppelin-solidity.git#release-v2.1.0-solc-0.5",
+    "prettier": "^1.15.3",
+    "prettier-plugin-solidity": "^1.0.0-alpha.12"
+  },
+  "devDependencies": {
+    "chai": "^4.2.0",
+    "chai-as-promised": "^7.1.1",
+    "truffle-cost": "^1.0.1"
+  }
+}

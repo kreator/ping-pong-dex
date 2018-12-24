@@ -1,0 +1,11 @@
+{
+  "extends": "prettier/prettier",
+  "rules": {
+    "avoid-throw": false,
+    "avoid-suicide": "error",
+    "avoid-sha3": "warn",
+    "indent": ["warn", 2],
+    "two-lines-top-level-separator": false,
+    "separate-by-one-line-in-contract": false
+  }
+}
