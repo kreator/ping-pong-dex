@@ -6,8 +6,8 @@ import "../../Token/IERC20.sol";
 /**
  @title Floor level master contract 
  @author Yoni Svechinsky (@svechinsky)
- @notice Stores the logic for FloorLeve proxy contracts to use. Is used when the price of token decreases.
- Meaining either when user is buying eth or selling tokens
+ @notice Stores the logic for FloorLevel proxy contracts. Is used when the rate of eth to token decreases.
+ Meaining either when user is selling eth or buying tokens
  */
 contract FloorMaster {
   using SafeMath for uint;
@@ -17,22 +17,23 @@ contract FloorMaster {
   IERC20 public token;
   mapping(address => uint) public withdrawTokens;
   mapping(address => address) public approvedWithdrawers;
-  address public approvedTrader; //Special class of trader meant for pingpong exchange
+  address public approvedTrader; //Special class of traders meant for pingpong exchange
 
   //CONSTANTS
   uint internal constant RATE_DECIMALS = 10 ** 18;
 
   //EXTERNAL FUNCTIONS
   /**
-  @notice Places a limit order trading msg.value for msg.value*rate tokens
+  @notice Places a limit order trading tokenAmount for tokenAmount/rate eth
+  @param tokenAmount amount of tokens to trade
   @param approvedWithdrawer address of approved withdrawer 
    */
-  function placeOrder(address approvedWithdrawer) external payable {
-    require(msg.value > 0, "No eth sent");
-    withdrawTokens[msg.sender] += msg.value.mul(rate).div(RATE_DECIMALS);
+  function placeOrder(uint tokenAmount, address approvedWithdrawer) external {
+    withdrawTokens[msg.sender] += tokenAmount.mul(RATE_DECIMALS).div(rate);
     if (approvedWithdrawer != address(0)) {
       approvedWithdrawers[msg.sender] = approvedWithdrawer;
     }
+    token.transferFrom(msg.sender, address(this), tokenAmount);
   }
 
   /**
@@ -44,90 +45,65 @@ contract FloorMaster {
   }
 
   /**
-  @notice Trade tokens for eth at rate if not enough eth send back remainder of tokens
-  @param recipient address to send the eth to
-  @param tokenAmount tokens to trade
+  @notice Trade eth for token at rate if not enough tokens send back the remainder of eth
+  @param recipient address to send the tokens to
   @return The remainder of the trade i.e. how much was not fulfilled  
    */
-  function trade(address payable recipient, uint tokenAmount) external returns(
-    uint remainder
-  ) {
-    require(tokenAmount > 0, "tokenAmount can't be 0");
-    uint ethBalance = address(this).balance;
-    uint ethToSend = tokenAmount.mul(RATE_DECIMALS).div(rate);
-    if (ethToSend > ethBalance) {
-      remainder = ethToSend - ethBalance;
-      recipient.transfer(ethBalance);
-      uint tokensToPull = tokenAmount - remainder.mul(rate).div(RATE_DECIMALS);
-      token.transferFrom(msg.sender, address(this), tokensToPull);
-
+  function trade(address recipient) external payable returns(uint remainder) {
+    require(msg.value > 0, "No eth sent");
+    uint tokenBalance = token.balanceOf(address(this));
+    uint tokensToSend = msg.value.mul(rate).div(RATE_DECIMALS);
+    if (tokensToSend > tokenBalance) {
+      remainder = tokensToSend - tokenBalance;
+      token.transfer(recipient, tokenBalance);
+      uint ethRemainder = remainder.mul(RATE_DECIMALS).div(rate);
+      msg.sender.transfer(ethRemainder);
     } else {
       remainder = 0;
-      recipient.transfer(ethToSend);
-      token.transferFrom(msg.sender, address(this), tokenAmount);
+      token.transfer(recipient, tokensToSend);
     }
-
-  }
-
-  /**
-    @dev This function is used to save gas when interacted with the ping pong dex.
-    It assumes that the tokenAmount is sent to the contract prior to calling this function 
-    this saves a transfer-approve-transfer sequence.
-    Note that unlike the regular trade this function fails when it doesn't have enough eth for the trade
-    @param recipient address to send the eth to
-    @param tokenAmount tokens sent to the exchange
-   */
-  function approvedTrade(address payable recipient, uint tokenAmount) external {
-    require(approvedTrader == msg.sender, "Sender not an approved trade");
-    require(tokenAmount > 0, "tokenAmount can't be 0");
-    uint ethBalance = address(this).balance;
-    uint ethToSend = tokenAmount.mul(RATE_DECIMALS).div(rate);
-    require(ethToSend <= ethBalance, "Not enough eth in level");
-
-    recipient.transfer(ethToSend);
-
   }
 
   /**
   @notice Withdraw assets after a trade has happened
-  @param tokenToWithdraw Amount of eth to withdraw
+  @param ethToWithdraw Amount of eth to withdraw
    */
-  function withdraw(uint tokenToWithdraw) external {
+  function withdraw(uint ethToWithdraw) external {
     require(
-      tokenToWithdraw <= withdrawTokens[msg.sender],
+      ethToWithdraw <= withdrawTokens[msg.sender],
       "not enough withdrawl tokens"
     );
     require(
-      tokenToWithdraw <= token.balanceOf(address(this)),
-      "Not enough tokens in level to withdraw"
+      ethToWithdraw <= address(this).balance,
+      "Not enough eth in level to withdraw"
     );
-    withdrawTokens[msg.sender] -= tokenToWithdraw;
-    token.transfer(msg.sender, tokenToWithdraw);
+    withdrawTokens[msg.sender] -= ethToWithdraw;
+    msg.sender.transfer(ethToWithdraw);
   }
 
   /**
   @notice Withdraw on behalf of someone that has approved you
-  @param tokenToWithdraw Amount of eth to withdraw
+  @param ethToWithdraw Amount of eth to withdraw
   @param recipient recipient of the withdrawl
    */
   function approvedWithdraw(
-    uint tokenToWithdraw,
+    uint ethToWithdraw,
     address payable recipient
   ) external {
     require(
-      tokenToWithdraw <= withdrawTokens[recipient],
+      ethToWithdraw <= withdrawTokens[recipient],
       "not enough withdrawl tokens"
     );
     require(
-      tokenToWithdraw <= token.balanceOf(address(this)),
-      "Not enough tokens in level to withdraw"
+      ethToWithdraw <= address(this).balance,
+      "Not enough eth in level to withdraw"
     );
     require(
       approvedWithdrawers[recipient] == msg.sender,
       "Withdrawer not approved"
     );
-    withdrawTokens[recipient] -= tokenToWithdraw;
-    token.transfer(recipient, tokenToWithdraw);
+    withdrawTokens[recipient] -= ethToWithdraw;
+    recipient.transfer(ethToWithdraw);
 
   }
 

@@ -13,7 +13,8 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
   //CONSTANTS
 
   //EVENTS
-
+  event Logger(uint num);
+  event AddressLogger(address ad);
   //MODIFIERS
 
   // CONSTRUCTOR
@@ -54,7 +55,7 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
       tokenReserve,
       false
     );
-
+    
     // Now that we finished this nasty recursion we only have AMM tokens to take care of
     // If we don't have AMM tokens, i.e. the whole order was fulfilled through the FPO then hooray
     if (ammAmount == 0) {
@@ -160,6 +161,7 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
     tokenReserveAtFloor = sqrt(
       tokenReserve.mul(ethReserve).mul(currentFloorPrice).div(RATE_DECIMALS)
     );
+    return tokenReserveAtFloor;
   }
 
   /**
@@ -172,6 +174,31 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
       ethReserve.mul(tokenReserve).mul(RATE_DECIMALS).div(currentFloorPrice)
     );
   }
+
+  /**
+  @notice This function gets the amount of tokens that will be in the contract when it hits the nearest price ciel
+  @return The amount of tokens at the floor
+   */
+  function getTokenReserveAtCiel() public view returns(
+    uint tokenReserveAtCiel
+  ) {
+    (uint ethReserve, uint tokenReserve) = getCurrentReserveInfo();
+    tokenReserveAtCiel = sqrt(
+      tokenReserve.mul(ethReserve).mul(currentCielPrice).div(RATE_DECIMALS)
+    );
+  }
+
+  /**
+  @notice This function gets the amount of eth that will be in the contract when it hits the nearest price ciel
+  @return The amount of eth at the floor
+   */
+  function getEthReserveAtCiel() public view returns(uint ethReserveAtCiel) {
+    (uint ethReserve, uint tokenReserve) = getCurrentReserveInfo();
+    ethReserveAtCiel = sqrt(
+      ethReserve.mul(tokenReserve).mul(RATE_DECIMALS).div(currentCielPrice)
+    );
+  }
+
 
   // INTERNAL FUNCTIONS
 
@@ -186,10 +213,10 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
   ) internal {
     token.transferFrom(
       msg.sender,
-      address(floors[currentFloorPrice]),
+      address(ciels[currentCielPrice]),
       tokenAmount
     );
-    floors[currentFloorPrice].approvedTrade(recipient, tokenAmount);
+    ciels[currentCielPrice].approvedTrade(recipient, tokenAmount);
   }
 
   /**
@@ -212,27 +239,27 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
     uint reserve,
     bool ethOrToken
   ) internal returns(uint ammAmount, uint fpoAmount) {
-    uint reserveAtFloor = ethOrToken ? getEthReserveAtFloor(
-
-    ) : getTokenReserveAtFloor();
-    uint assetsTillFloor = ethOrToken ? reserve.sub(
-      reserveAtFloor
-    ) : reserveAtFloor.sub(reserve);
+    uint reserveAtCiel = ethOrToken ? getEthReserveAtCiel(
+    ) : getTokenReserveAtCiel();
+    uint assetsTillCiel = ethOrToken ? reserve.sub(
+      reserveAtCiel
+    ) : reserveAtCiel.sub(reserve);
     uint fpoReturn;
     uint fpoRemainder;
 
     // AMM Check short circuit
-    if (assetsTillFloor >= amount) {
+    if (assetsTillCiel >= amount) {
       return (amount, 0);
     }
     // Run through FPO
-    ammAmount = assetsTillFloor;
+    ammAmount = assetsTillCiel;
     // We use a help function here to send the exact amount of tokens
     (fpoReturn, fpoRemainder) = ethOrToken ? FPOExchange.tokenToEthOutput(
       amount - ammAmount,
-      currentFloorPrice
-    ) : FPOExchange.tokenToEthInput(amount - ammAmount, currentFloorPrice);
-    // Do FPO trade without remainder
+      currentCielPrice
+    ) : FPOExchange.tokenToEthInput(amount - ammAmount, currentCielPrice);
+    
+    //Do FPO trade without remainder
     ethOrToken ? sellTokensToFPO(fpoReturn, recipient) : sellTokensToFPO(
       amount - ammAmount - fpoRemainder,
       recipient
@@ -242,20 +269,21 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
       //If Remainder is 0 that means that the trade was a success and
       // loop is done
       return (ammAmount, fpoAmount);
-
-    } else {
-      // Remainder not 0, the level is through
-      // Go down a level
-      goLevelDown(); // TODO: change this to recursivly passable virtual price levels and only do one change at the end
-      // recursion :_(
-      (uint additionAMM, uint additionFPO) = handleTokensToEth(
-        fpoRemainder,
-        recipient,
-        reserveAtFloor,
-        ethOrToken
-      );
-      return (ammAmount + additionAMM, fpoAmount + additionFPO);
+    
     }
+    // else {
+    //   // Remainder not 0, the level is through
+    //   // Go up a level
+    //   goLevelUp(); // TODO: change this to recursivly passable virtual price levels and only do one change at the end
+    //   // recursion :_(
+    //   (uint additionAMM, uint additionFPO) = handleTokensToEth(
+    //     fpoRemainder,
+    //     recipient,
+    //     reserveAtCiel,
+    //     ethOrToken
+    //   );
+    //   return (ammAmount + additionAMM, fpoAmount + additionFPO);
+    // }
 
   }
 
@@ -278,6 +306,10 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
     currentFloorPrice = calculateStepDown(currentFloorPrice, priceSpread);
   }
 
+  function goLevelUp() private {
+    currentFloorPrice = currentCielPrice;
+    currentCielPrice = calculateStepUp(currentCielPrice, priceSpread);
+  }
   /**
   @dev Called after selling tokens at FPO and checks if the remainder is small enough to go with the AMM 
   or needs to hit another level
@@ -286,15 +318,15 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
   function handleTokenSellRemainder(uint remainder) private view returns(
     uint ammAmount
   ) {
-    (uint ethReserve, uint tokenReserve) = getCurrentReserveInfo();
-    uint tokenReserveAtFloor = getTokenReserveAtFloor();
-    if (remainder <= tokenReserve.sub(tokenReserveAtFloor)) {
+    (, uint tokenReserve) = getCurrentReserveInfo();
+    uint tokenReserveAtCiel = getTokenReserveAtCiel();
+    if (remainder <= tokenReserve.sub(tokenReserveAtCiel)) {
       // If AMM seals the deal then hooray
       ammAmount = remainder;
 
     } else {
       // If not incerement accordingly and go back to the loop
-      ammAmount = tokenReserve.sub(tokenReserveAtFloor);
+      ammAmount = tokenReserve.sub(tokenReserveAtCiel);
     }
   }
 

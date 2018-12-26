@@ -7,29 +7,43 @@ var assert = chai.assert;
 
 var PingPongExchange = artifacts.require("PingPongExchange");
 var MockToken = artifacts.require("MockToken");
+var LevelFactory = artifacts.require("LevelFactory");
+var FloorLevel = artifacts.require("FloorMaster");
+var CielLevel = artifacts.require("CielMaster");
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 contract("Ping Pong Exchange", async accounts => {
   let token;
+  let levelFactory;
   let exchange;
-  let deadline;
+  const deadline = Math.floor(Date.now()) + 500;
+
+  before("Load instances", async () => {
+    token = await MockToken.deployed();
+    levelFactory = await LevelFactory.deployed();
+  });
+
+  it("Deployes an exchange and approve token access", async () => {
+    let largeAmount = web3.utils.toWei("100000");
+    exchange = await PingPongExchange.new(
+      token.address,
+      ZERO_ADDRESS,
+      levelFactory.address
+    );
+
+    await token.approve(exchange.address, largeAmount, { from: accounts[0] });
+    assert(true);
+  });
 
   it("Initialize exchange and seeds liquidity", async () => {
-    token = await MockToken.deployed();
     let initialTokenAmount = web3.utils.toWei("100");
     let initialEthAmount = web3.utils.toWei("10");
-
-    exchange = await PingPongExchange.new(token.address, ZERO_ADDRESS);
-    await token.approve(exchange.address, initialTokenAmount, {
-      from: accounts[0]
-    });
 
     await exchange.initializeExchange(initialTokenAmount, {
       from: accounts[0],
       value: initialEthAmount
     });
-
     let totalSupply = await exchange.totalSupply.call();
     assert(web3.utils.fromWei(totalSupply) == 10, "Total supply is not 10");
 
@@ -51,8 +65,7 @@ contract("Ping Pong Exchange", async accounts => {
   it("Adds Liquidity", async () => {
     let ethLiquidityToAdd = web3.utils.toWei("10");
     let tokenLiquidityToAdd = web3.utils.toWei("100");
-    deadline = Math.floor(Date.now() / 1000) + 500;
-    await token.approve(exchange.address, tokenLiquidityToAdd);
+
     await exchange.addLiquidity(tokenLiquidityToAdd, deadline, {
       from: accounts[0],
       value: ethLiquidityToAdd
@@ -74,22 +87,6 @@ contract("Ping Pong Exchange", async accounts => {
       200,
       "Tokens not transfered to exchange"
     );
-
-    await token.approve(exchange.address, tokenLiquidityToAdd);
-
-    assert.isRejected(
-      exchange.addLiquidity(tokenLiquidityToAdd, deadline - 600, {
-        from: accounts[0],
-        value: ethLiquidityToAdd
-      })
-    );
-
-    assert.isRejected(
-      exchange.addLiquidity(10000, deadline, {
-        from: accounts[0],
-        value: ethLiquidityToAdd
-      })
-    );
   });
 
   it("Removes Liquidity", async () => {
@@ -97,6 +94,7 @@ contract("Ping Pong Exchange", async accounts => {
     let startTokenBalance = await token.balanceOf.call(accounts[0]);
     let ethLiquidityToRemove = web3.utils.toWei("10");
     let tokenLiquidityToRemove = web3.utils.toWei("100");
+    let tooMuchLiquidityToRemove = web3.utils.toWei("10000");
 
     await exchange.removeLiquidity(
       liquiditySharesToBurn,
@@ -115,10 +113,46 @@ contract("Ping Pong Exchange", async accounts => {
     assert.isRejected(
       exchange.removeLiquidity(
         liquiditySharesToBurn,
-        tokenLiquidityToRemove,
-        tokenLiquidityToRemove,
+        tooMuchLiquidityToRemove,
+        tooMuchLiquidityToRemove,
         deadline
       )
     );
+  });
+
+  it("Adds eth to ciel", async () => {
+    let currentCielPrice = await exchange.currentCielPrice.call();
+    let cielAddress = await exchange.ciels.call(currentCielPrice);
+    console.log(cielAddress);
+    let ciel = await CielLevel.at(cielAddress);
+
+    let ethToSell = web3.utils.toWei("3");
+
+    await ciel.placeOrder(ZERO_ADDRESS, {
+      from: accounts[0],
+      value: ethToSell
+    });
+
+    let withdrawTokens = web3.utils.fromWei(
+      await ciel.withdrawTokens.call(accounts[0])
+    );
+    
+ 
+    assert.approximately(
+      // Approximately beacuse big numbers
+      +withdrawTokens,
+      3 * web3.utils.fromWei(currentCielPrice),
+      0.00000001,
+      "Withdraw tokens not equal to amount/rate"
+    );
+  });
+
+  it("Sells 10 tokens for eth", async () => {
+    let tokenAmount = web3.utils.toWei("10");
+
+    await exchange.tokenToEthInput(tokenAmount, 1, deadline, accounts[0], {
+      from: accounts[0]
+    });
+
   });
 });

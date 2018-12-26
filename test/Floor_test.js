@@ -1,4 +1,3 @@
-const truffleCost = require("truffle-cost");
 var chai = require("chai");
 var chaiAsPromised = require("chai-as-promised");
 
@@ -23,22 +22,24 @@ contract("Floor Level", async accounts => {
   before("Initialize level proxy", async () => {
     token = await MockToken.deployed();
     master = await FloorMaster.deployed();
-    proxy = await LevelProxy.new(rate, token.address, master.address);
-    level = await FloorMaster.at(proxy.address);
-    await truffleCost.log(
-      token.approve(level.address, web3.utils.toWei("100000"))
+    proxy = await LevelProxy.new(
+      rate,
+      token.address,
+      ZERO_ADDRESS,
+      master.address
+      
     );
+    level = await FloorMaster.at(proxy.address);
+    await token.approve(level.address, web3.utils.toWei("100000"));
   });
 
   it("Places an order without a withdrawer", async () => {
     let ethToSell = web3.utils.toWei("10");
 
-    await truffleCost.log(
-      level.placeOrder(ZERO_ADDRESS, {
-        from: accounts[0],
-        value: ethToSell
-      })
-    );
+    await level.placeOrder(ZERO_ADDRESS, {
+      from: accounts[0],
+      value: ethToSell
+    });
 
     let withdrawTokens = web3.utils.fromWei(
       await level.withdrawTokens.call(accounts[0])
@@ -58,12 +59,10 @@ contract("Floor Level", async accounts => {
       from: accounts[0]
     });
 
-    let { receipt } = await truffleCost.log(
-      level.trade(accounts[0], tokensToSell, {
-        from: accounts[0],
-        gasPrice: 1
-      })
-    );
+    let { receipt } = await level.trade(accounts[0], tokensToSell, {
+      from: accounts[0],
+      gasPrice: 1
+    });
 
     assert.equal(remainder, 0, "Remainder not 0");
     let ethBalancePost = await web3.eth.getBalance(accounts[0]);
@@ -79,9 +78,7 @@ contract("Floor Level", async accounts => {
   it("Successfully withdraws tokens after trade", async () => {
     let tokensToWithdraw = web3.utils.toWei("100");
     let tokenBalancePre = await token.balanceOf(accounts[0]);
-    await truffleCost.log(
-      level.withdraw(tokensToWithdraw, { from: accounts[0] })
-    );
+    await level.withdraw(tokensToWithdraw, { from: accounts[0] });
     let tokenBalancePost = await token.balanceOf(accounts[0]);
 
     let balanceDifference = tokenBalancePost.sub(tokenBalancePre);
@@ -101,12 +98,10 @@ contract("Floor Level", async accounts => {
   it("Places an order with an approved withdrawer", async () => {
     let ethToSell = web3.utils.toWei("1");
 
-    await truffleCost.log(
-      level.placeOrder(accounts[1], {
-        from: accounts[0],
-        value: ethToSell
-      })
-    );
+    await level.placeOrder(accounts[1], {
+      from: accounts[0],
+      value: ethToSell
+    });
 
     let withdrawTokens = web3.utils.fromWei(
       await level.withdrawTokens.call(accounts[0])
@@ -124,14 +119,12 @@ contract("Floor Level", async accounts => {
   it("Allows approved withdrawer to withdraw", async () => {
     let tokensToWithdraw = web3.utils.toWei("100");
     let preBalance = await token.balanceOf(accounts[0]);
-    await truffleCost.log(
-      level.approvedWithdraw(tokensToWithdraw, accounts[0], {
-        from: accounts[1]
-      })
-    );
+    await level.approvedWithdraw(tokensToWithdraw, accounts[0], {
+      from: accounts[1]
+    });
     let postBalance = await token.balanceOf(accounts[0]);
     assert.equal(
-      web3.utils.fromWei((postBalance.sub(preBalance)).toString()),
+      web3.utils.fromWei(postBalance.sub(preBalance).toString()),
       100,
       "Withdrawl failed"
     );

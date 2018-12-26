@@ -14,13 +14,13 @@ contract LevelFactory {
     cielMaster = _cielMaster;
   }
 
-  function createCielContract(uint rate, address token) public returns(
+  function createCielLevel(uint rate, address token) public returns(
     address levelAddress
   ) {
     levelAddress = address(new LevelProxy(rate, token, msg.sender, cielMaster));
   }
 
-  function createFloorContract(uint rate, address token) public returns(
+  function createFloorLevel(uint rate, address token) public returns(
     address levelAddress
   ) {
     levelAddress = address(new LevelProxy(rate, token, msg.sender, floorMaster));

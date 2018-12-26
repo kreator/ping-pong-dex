@@ -96,15 +96,15 @@ contract FPOExchange is BasicExchange {
     uint ethAmount,
     uint remainder
   ) {
-    address floorAddress = address(floors[rate]);
-    if (floorAddress == address(0)) {
+    address cielAddress = address(ciels[rate]);
+    if (cielAddress == address(0)) {
       return (0, tokenAmount);
     }
-    uint ethAtFloor = floorAddress.balance;
+    uint ethAtCiel = cielAddress.balance;
     uint ethFromTokens = tokenAmount.mul(RATE_DECIMALS).div(rate);
-    if (ethFromTokens > ethAtFloor) {
-      ethAmount = ethAtFloor;
-      remainder = (ethFromTokens - ethAtFloor).mul(rate).div(RATE_DECIMALS);
+    if (ethFromTokens > ethAtCiel) {
+      ethAmount = ethAtCiel;
+      remainder = (ethFromTokens - ethAtCiel).mul(rate).div(RATE_DECIMALS);
     } else {
       ethAmount = ethFromTokens;
       remainder = 0;
@@ -121,14 +121,14 @@ contract FPOExchange is BasicExchange {
     uint tokenAmount,
     uint unfulfilled
   ) {
-    address floorAddress = address(floors[rate]);
-    if (floorAddress == address(0)) {
+    address cielAddress = address(ciels[rate]);
+    if (cielAddress == address(0)) {
       return (0, ethAmount);
     }
-    uint ethAtFloor = floorAddress.balance;
-    if (ethAmount > ethAtFloor) {
-      tokenAmount = ethAtFloor.mul(rate).div(RATE_DECIMALS);
-      unfulfilled = ethAmount - ethAtFloor;
+    uint ethAtCiel = cielAddress.balance;
+    if (ethAmount > ethAtCiel) {
+      tokenAmount = ethAtCiel.mul(rate).div(RATE_DECIMALS);
+      unfulfilled = ethAmount - ethAtCiel;
     } else {
       unfulfilled = 0;
       tokenAmount = ethAmount.mul(rate).div(RATE_DECIMALS);
@@ -145,15 +145,15 @@ contract FPOExchange is BasicExchange {
     uint tokenAmount,
     uint remainder
   ) {
-    address cielAddress = address(ciels[rate]);
-    if (cielAddress == address(0)) {
+    address floorAddress = address(floors[rate]);
+    if (floorAddress == address(0)) {
       return (0, ethAmount);
     }
-    uint tokensAtCiel = token.balanceOf(cielAddress);
+    uint tokensAtFloor = token.balanceOf(floorAddress);
     uint tokensFromEth = ethAmount.mul(rate).div(RATE_DECIMALS);
-    if (tokensFromEth > tokensAtCiel) {
-      tokenAmount = tokensAtCiel;
-      remainder = (tokensFromEth - tokensAtCiel).mul(RATE_DECIMALS).div(rate);
+    if (tokensFromEth > tokensAtFloor) {
+      tokenAmount = tokensAtFloor;
+      remainder = (tokensFromEth - tokensAtFloor).mul(RATE_DECIMALS).div(rate);
     } else {
       tokenAmount = tokensFromEth;
       remainder = 0;
@@ -170,14 +170,14 @@ contract FPOExchange is BasicExchange {
     uint ethAmount,
     uint unfulfilled
   ) {
-    address cielAddress = address(ciels[rate]);
-    if (cielAddress == address(0)) {
+    address floorAddress = address(floors[rate]);
+    if (floorAddress == address(0)) {
       return (0, tokenAmount);
     }
-    uint tokensAtCiel = token.balanceOf(address(ciels[rate]));
-    if (tokenAmount > tokensAtCiel) {
-      ethAmount = tokensAtCiel.mul(RATE_DECIMALS).div(rate);
-      unfulfilled = tokenAmount - tokensAtCiel;
+    uint tokensAtFloor = token.balanceOf(address(floorAddress));
+    if (tokenAmount > tokensAtFloor) {
+      ethAmount = tokensAtFloor.mul(RATE_DECIMALS).div(rate);
+      unfulfilled = tokenAmount - tokensAtFloor;
     } else {
       unfulfilled = 0;
       ethAmount = tokenAmount.mul(RATE_DECIMALS).div(rate);
