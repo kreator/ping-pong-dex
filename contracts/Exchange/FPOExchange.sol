@@ -59,31 +59,28 @@ contract FPOExchange is BasicExchange {
     addCielLevel(currentCielPrice);
     addFloorLevel(currentFloorPrice);
   }
-
+  
   // INTERNAL FUNCTIONS
 
-  function calculateStepUp(uint amount, uint32 step) internal pure returns(
+  function calculateStepUp(uint amount, uint32 step) public pure returns(
     uint
   ) {
     return amount.mul(PPM_MAX + step).div(PPM_MAX);
   }
 
-  function calculateStepDown(uint amount, uint32 step) internal pure returns(
+  function calculateStepDown(uint amount, uint32 step) public pure returns(
     uint
   ) {
     return amount.mul(PPM_MAX).div(PPM_MAX + step);
   }
 
-  function addCielLevel(uint rate) internal {
-    ciels[rate] = ICielLevel(
-      levelFactory.createCielLevel(rate, address(token))
-    );
+  function addCielLevel(uint rate) public returns(address cielAddress) {
+    cielAddress = levelFactory.createCielLevel(rate, address(token));
+    ciels[rate] = ICielLevel(cielAddress);
   }
-  function addFloorLevel(uint rate) internal {
-    floors[rate] = IFloorLevel(
-      levelFactory.createFloorLevel(rate, address(token))
-    );
-
+  function addFloorLevel(uint rate) public returns(address floorAddress) {
+    floorAddress = levelFactory.createFloorLevel(rate, address(token));
+    floors[rate] = IFloorLevel(floorAddress);
   }
 
   /**

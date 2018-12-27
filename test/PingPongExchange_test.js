@@ -120,15 +120,30 @@ contract("Ping Pong Exchange", async accounts => {
     );
   });
 
-  it("Adds eth to ciel", async () => {
+  it("Adds eth to 2 ciels", async () => {
     let currentCielPrice = await exchange.currentCielPrice.call();
+    let priceSpread = await exchange.priceSpread.call();
+    let nextCielPrice = await exchange.calculateStepUp(
+      currentCielPrice,
+      priceSpread
+    );
+
     let cielAddress = await exchange.ciels.call(currentCielPrice);
-    console.log(cielAddress);
     let ciel = await CielLevel.at(cielAddress);
 
-    let ethToSell = web3.utils.toWei("3");
+    //create next ciel
+    await exchange.addCielLevel(nextCielPrice);
+    let nextCielAddress = await exchange.ciels.call(nextCielPrice);
+    let nextCiel = await CielLevel.at(nextCielAddress);
+
+    let ethToSell = web3.utils.toWei("2");
 
     await ciel.placeOrder(ZERO_ADDRESS, {
+      from: accounts[0],
+      value: ethToSell
+    });
+
+    await nextCiel.placeOrder(ZERO_ADDRESS, {
       from: accounts[0],
       value: ethToSell
     });
@@ -136,12 +151,11 @@ contract("Ping Pong Exchange", async accounts => {
     let withdrawTokens = web3.utils.fromWei(
       await ciel.withdrawTokens.call(accounts[0])
     );
-    
- 
+
     assert.approximately(
       // Approximately beacuse big numbers
       +withdrawTokens,
-      3 * web3.utils.fromWei(currentCielPrice),
+      2 * web3.utils.fromWei(currentCielPrice),
       0.00000001,
       "Withdraw tokens not equal to amount/rate"
     );
@@ -150,9 +164,57 @@ contract("Ping Pong Exchange", async accounts => {
   it("Sells 10 tokens for eth", async () => {
     let tokenAmount = web3.utils.toWei("10");
 
+    output = await exchange.tokenToEthInput.call(
+      tokenAmount,
+      1,
+      deadline,
+      accounts[0],
+      {
+        from: accounts[0]
+      }
+    );
+
     await exchange.tokenToEthInput(tokenAmount, 1, deadline, accounts[0], {
       from: accounts[0]
     });
 
+    let FPOOnly = web3.utils.fromWei(web3.utils.toBN("976190476190476190"));
+    let ammOnlyAmount = web3.utils.fromWei(
+      web3.utils.toBN("909090909090909090")
+    );
+    let ethReturned = web3.utils.fromWei(output);
+    assert(ethReturned > ammOnlyAmount, "Not better than AMM only");
+    assert(ethReturned > FPOOnly, "Not better than FPO only");
+  });
+  it("buyes 1.5 eth for tokens and goes through a ciel level", async () => {
+    //Should go through the level
+    let ethAmount = web3.utils.toWei("1.5");
+
+    output = await exchange.tokenToEthOutput.call(
+      ethAmount,
+      web3.utils.toWei("100"),
+      deadline,
+      accounts[0],
+      {
+        from: accounts[0]
+      }
+    );
+
+    await exchange.tokenToEthOutput(
+      ethAmount,
+      web3.utils.toWei("100"),
+      deadline,
+      accounts[0],
+      {
+        from: accounts[0]
+      }
+    );
+    let FPOOnly = web3.utils.fromWei(web3.utils.toBN("5121951219512195121"));
+    let ammOnlyAmount = web3.utils.fromWei(
+      web3.utils.toBN("5394969491974494466")
+    );
+    let tokensPulled = web3.utils.fromWei(output);
+    assert(tokensPulled <= ammOnlyAmount, "Not better than AMM only");
+    assert(tokensPulled <= FPOOnly, "Not better than FPO only");
   });
 });

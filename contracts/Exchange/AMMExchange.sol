@@ -160,11 +160,10 @@ contract AMMExchange is BasicExchange {
     uint inputAmount,
     uint inputReserve,
     uint outputReserve
-  ) internal view returns(uint) {
+  ) internal pure returns(uint) {
     require(inputReserve > 0 && outputReserve > 0, "Reserves are 0");
-    uint inputAmountWithFee = inputAmount.mul(PPM_MAX - swapFee);
-    uint numerator = inputAmountWithFee.mul(outputReserve);
-    uint denominator = inputReserve.mul(PPM_MAX).add(inputAmountWithFee);
+    uint numerator = inputAmount.mul(outputReserve);
+    uint denominator = inputReserve.add(inputAmount);
     return numerator.div(denominator);
   }
 
@@ -178,10 +177,10 @@ contract AMMExchange is BasicExchange {
     uint outputAmount,
     uint inputReserve,
     uint outputReserve
-  ) internal view returns(uint) {
+  ) internal pure returns(uint) {
     require(inputReserve > 0 && outputReserve > 0, "Reserves are 0");
-    uint numerator = outputAmount.mul(inputReserve).mul(PPM_MAX);
-    uint denominator = outputReserve.sub(outputAmount).mul(PPM_MAX - swapFee);
+    uint numerator = outputAmount.mul(inputReserve);
+    uint denominator = outputReserve.sub(outputAmount);
     return numerator.div(denominator);
   }
 
