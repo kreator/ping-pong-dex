@@ -458,25 +458,4 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
     currentFloorPrice = currentCielPrice;
     currentCielPrice = calculateStepUp(currentCielPrice, priceSpread);
   }
-  /**
-  @dev Called after selling tokens at FPO and checks if the remainder is small enough to go with the AMM 
-  or needs to hit another level
-  @param remainder the remainder of tokens left after the FPO sell
-   */
-  function handleTokenSellRemainder(
-    uint remainder,
-    uint cielPrice
-  ) private view returns(uint ammAmount) {
-    (, uint tokenReserve) = getCurrentReserveInfo();
-    uint tokenReserveAtCiel = getTokenReserveAtRate(cielPrice);
-    if (remainder <= tokenReserve.sub(tokenReserveAtCiel)) {
-      // If AMM seals the deal then hooray
-      ammAmount = remainder;
-
-    } else {
-      // If not incerement accordingly and go back to the loop
-      ammAmount = tokenReserve.sub(tokenReserveAtCiel);
-    }
-  }
-
 }
