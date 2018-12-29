@@ -127,7 +127,6 @@ contract("Ping Pong Exchange", async accounts => {
       currentCielPrice,
       priceSpread
     );
-
     let cielAddress = await exchange.ciels.call(currentCielPrice);
     let ciel = await CielLevel.at(cielAddress);
 
@@ -200,6 +199,8 @@ contract("Ping Pong Exchange", async accounts => {
       }
     );
 
+    let startingCielPrice = await exchange.currentCielPrice.call();
+
     await exchange.tokenToEthOutput(
       ethAmount,
       web3.utils.toWei("100"),
@@ -216,5 +217,104 @@ contract("Ping Pong Exchange", async accounts => {
     let tokensPulled = web3.utils.fromWei(output);
     assert(tokensPulled <= ammOnlyAmount, "Not better than AMM only");
     assert(tokensPulled <= FPOOnly, "Not better than FPO only");
+
+    let finishingCielPrice = await exchange.currentCielPrice.call();
+
+    assert(finishingCielPrice > startingCielPrice, "Ciel price didn't change");
+  });
+  it("Adds tokens to the next two floors", async () => {
+    let currentFloorPrice = await exchange.currentFloorPrice.call();
+    let priceSpread = await exchange.priceSpread.call();
+    let nextFloorPrice = await exchange.calculateStepDown.call(
+      currentFloorPrice,
+      priceSpread
+    );
+    let nextFloorAddress = await exchange.floors.call(nextFloorPrice);
+    let nextFloor = await FloorLevel.at(nextFloorAddress);
+
+    //create next ciel
+    await exchange.addFloorLevel(currentFloorPrice);
+    let floorAddress = await exchange.floors.call(currentFloorPrice);
+    let floor = await FloorLevel.at(floorAddress);
+
+    let tokensToFloors = web3.utils.toWei("20");
+
+    await token.approve(floor.address, tokensToFloors);
+    await token.approve(nextFloor.address, tokensToFloors);
+
+    await floor.placeOrder(tokensToFloors, ZERO_ADDRESS, {
+      from: accounts[0]
+    });
+
+    await nextFloor.placeOrder(tokensToFloors, ZERO_ADDRESS, {
+      from: accounts[0]
+    });
+
+    let withdrawTokens = web3.utils.fromWei(
+      await floor.withdrawTokens.call(accounts[0])
+    );
+
+    assert.approximately(
+      // Approximately beacuse big numbers
+      +withdrawTokens,
+      20 / web3.utils.fromWei(currentFloorPrice),
+      0.00000001,
+      "Withdraw tokens not equal to amount/rate"
+    );
+  });
+
+  it("Sells 0.001 eth for tokens", async () => {
+    let ethAmount = web3.utils.toWei("0.001");
+
+    output = await exchange.ethToTokenInput.call(1, deadline, accounts[0], {
+      from: accounts[0],
+      value: ethAmount
+    });
+
+    await exchange.ethToTokenInput(1, deadline, accounts[0], {
+      from: accounts[0],
+      value: ethAmount
+    });
+
+    let FPOOnly = web3.utils.fromWei(web3.utils.toBN("10243902439024390"));
+    let ammOnlyAmount = web3.utils.fromWei(
+      web3.utils.toBN("10754982144487177")
+    );
+    let tokensReturned = web3.utils.fromWei(output);
+    assert(tokensReturned >= ammOnlyAmount, "Not better than AMM only");
+    assert(tokensReturned >= FPOOnly, "Not better than FPO only");
+  });
+
+  it("Buyes 40 tokens for for tokens and goes through a floor level", async () => {
+    //Should go through the level
+    let tokenAmount = web3.utils.toWei("50");
+
+    output = await exchange.ethToTokenOutput.call(
+      tokenAmount,
+      deadline,
+      accounts[0],
+      {
+        from: accounts[0],
+        value: web3.utils.toWei("45")
+      }
+    );
+
+    let startingFloorPrice = await exchange.currentFloorPrice.call();
+
+    await exchange.ethToTokenOutput(tokenAmount, deadline, accounts[0], {
+      from: accounts[0],
+      value: web3.utils.toWei("45")
+    });
+    // let FPOOnly = web3.utils.fromWei(web3.utils.toBN("5121951219512195121"));
+    // let ammOnlyAmount = web3.utils.fromWei(
+    //   web3.utils.toBN("5394969491974494466")
+    // );
+    // let tokensPulled = web3.utils.fromWei(output);
+    // assert(tokensPulled <= ammOnlyAmount, "Not better than AMM only");
+    // assert(tokensPulled <= FPOOnly, "Not better than FPO only");
+
+    let finishingFloorPrice = await exchange.currentFloorPrice.call();
+
+    assert(startingFloorPrice != finishingFloorPrice, "Floor price didn't change");
   });
 });

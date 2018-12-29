@@ -27,16 +27,18 @@ contract("Ciel Level", async accounts => {
       token.address,
       ZERO_ADDRESS,
       master.address
+      
     );
     level = await CielMaster.at(proxy.address);
     await token.approve(level.address, web3.utils.toWei("100000"));
   });
 
   it("Places an order without a withdrawer", async () => {
-    let tokensToSell = web3.utils.toWei("1000");
+    let ethToSell = web3.utils.toWei("10");
 
-    await level.placeOrder(tokensToSell, ZERO_ADDRESS, {
-      from: accounts[0]
+    await level.placeOrder(ZERO_ADDRESS, {
+      from: accounts[0],
+      value: ethToSell
     });
 
     let withdrawTokens = web3.utils.fromWei(
@@ -45,60 +47,60 @@ contract("Ciel Level", async accounts => {
 
     assert.equal(
       withdrawTokens,
-      10,
+      1000,
       "Withdraw tokens not equal to amount/rate"
     );
   });
 
-  it("Successfully trades eth for tokens", async () => {
-    let ethToSell = web3.utils.toWei("2");
-    let tokenBalancePre = await token.balanceOf.call(accounts[0]);
-    let remainder = await level.trade.call(accounts[0], {
-      value: ethToSell,
+  it("Successfully trades tokens for eth", async () => {
+    let tokensToSell = web3.utils.toWei("200");
+    let ethBalancePre = await web3.eth.getBalance(accounts[0]);
+    let remainder = await level.trade.call(accounts[0], tokensToSell, {
       from: accounts[0]
     });
-    //console.log("Gas used to trade", remainder.receipt.gasUsed);
-    await level.trade(accounts[0], { value: ethToSell, from: accounts[0] });
 
-    assert.equal(remainder, 0, "Remainder not 0");
-    let tokenBalancePost = await token.balanceOf.call(accounts[0]);
-    assert.equal(
-      web3.utils.fromWei(tokenBalancePost.sub(tokenBalancePre)),
-      "200",
-      "Tokens not transfered"
-    );
-  });
-
-  it("Successfully withdraws eth after trade", async () => {
-    let ethToWithdraw = web3.utils.toWei("1");
-    let ethBalancePre = await web3.eth.getBalance(accounts[0]);
-    let { receipt } = await level.withdraw(ethToWithdraw, {
+    let { receipt } = await level.trade(accounts[0], tokensToSell, {
       from: accounts[0],
       gasPrice: 1
     });
+
+    assert.equal(remainder, 0, "Remainder not 0");
     let ethBalancePost = await web3.eth.getBalance(accounts[0]);
-
-    let balanceDifferenceWithGas = ethBalancePost - ethBalancePre;
-
-    balanceDifferenceWithGas += receipt.gasUsed;
+    let ethDiff = ethBalancePost - ethBalancePre + receipt.gasUsed;
     assert.approximately(
-      +web3.utils.fromWei(balanceDifferenceWithGas.toString()),
-      1,
-      0.0000001,
-      "eth not equal"
+      +web3.utils.fromWei(ethDiff.toString()),
+      2,
+      0.00000001,
+      "Eth not traded"
     );
   });
 
-  it("Fails on trying to withdraw without tokens", async () => {
-    let ethToWithdraw = web3.utils.toWei("1");
-    assert.isRejected(level.withdraw(ethToWithdraw, { from: accounts[1] }));
+  it("Successfully withdraws tokens after trade", async () => {
+    let tokensToWithdraw = web3.utils.toWei("100");
+    let tokenBalancePre = await token.balanceOf(accounts[0]);
+    await level.withdraw(tokensToWithdraw, { from: accounts[0] });
+    let tokenBalancePost = await token.balanceOf(accounts[0]);
+
+    let balanceDifference = tokenBalancePost.sub(tokenBalancePre);
+
+    assert.equal(
+      +web3.utils.fromWei(balanceDifference),
+      100,
+      "tokens not withdrawn"
+    );
+  });
+
+  it("Fails on trying to withdraw without withdrawl tokens", async () => {
+    let tokensToWithdraw = web3.utils.toWei("1");
+    assert.isRejected(level.withdraw(tokensToWithdraw, { from: accounts[2] }));
   });
 
   it("Places an order with an approved withdrawer", async () => {
-    let tokensToSell = web3.utils.toWei("1000");
+    let ethToSell = web3.utils.toWei("1");
 
-    await level.placeOrder(tokensToSell, accounts[1], {
-      from: accounts[0]
+    await level.placeOrder(accounts[1], {
+      from: accounts[0],
+      value: ethToSell
     });
 
     let withdrawTokens = web3.utils.fromWei(
@@ -108,22 +110,22 @@ contract("Ciel Level", async accounts => {
     let approvedWithdrawer = await level.approvedWithdrawers(accounts[0]);
     assert.equal(
       withdrawTokens,
-      19, // Beacuse of previous order
+      1000,
       "Withdraw tokens not equal to amount/rate"
     );
 
     assert.equal(approvedWithdrawer, accounts[1], "Withdrawer not as expected");
   });
   it("Allows approved withdrawer to withdraw", async () => {
-    let ethToWithdraw = web3.utils.toWei("0.5");
-    let preBalance = await web3.eth.getBalance(accounts[0]);
-    await level.approvedWithdraw(ethToWithdraw, accounts[0], {
+    let tokensToWithdraw = web3.utils.toWei("100");
+    let preBalance = await token.balanceOf(accounts[0]);
+    await level.approvedWithdraw(tokensToWithdraw, accounts[0], {
       from: accounts[1]
     });
-    let postBalance = await web3.eth.getBalance(accounts[0]);
+    let postBalance = await token.balanceOf(accounts[0]);
     assert.equal(
-      web3.utils.fromWei((postBalance - preBalance).toString()),
-      0.5,
+      web3.utils.fromWei(postBalance.sub(preBalance).toString()),
+      100,
       "Withdrawl failed"
     );
   });

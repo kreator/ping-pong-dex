@@ -65,13 +65,18 @@ contract FPOExchange is BasicExchange {
   function calculateStepUp(uint amount, uint32 step) public pure returns(
     uint
   ) {
-    return amount.mul(PPM_MAX + step).div(PPM_MAX);
+    uint result = amount.mul(PPM_MAX + step).div(PPM_MAX);
+    return result;
   }
 
   function calculateStepDown(uint amount, uint32 step) public pure returns(
     uint
   ) {
-    return amount.mul(PPM_MAX).div(PPM_MAX + step);
+    uint result = amount.mul(PPM_MAX).div(PPM_MAX + step);
+    if (result.mul(PPM_MAX + step).div(PPM_MAX) < amount) {
+      result = result + 1; // the occasional rounding fix
+    }
+    return result;
   }
 
   function addCielLevel(uint rate) public returns(address cielAddress) {

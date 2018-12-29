@@ -145,7 +145,7 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
       true,
       currentFloorPrice
     );
-
+    
     // Now that we finished this nasty recursion we only have AMM tokens to take care of
     // If we don't have AMM tokens, i.e. the whole order was fulfilled through the FPO then hooray
     if (ammAmount == 0) {
@@ -161,7 +161,7 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
     require(totalTokens >= minReturn, "Too little tokens returned");
 
     // AMM Transfers
-    token.transfer(msg.sender, ammTokens);
+    token.transfer(recipient, ammTokens);
     return totalTokens;
   }
 
@@ -180,13 +180,13 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
     address payable recipient
   ) external payable deadlineGuard(deadline) returns(uint) {
     // Start running the recursive handling function
-    require(msg.value > 0);
-    uint ethReserve = address(this).balance;
+    require(msg.value > 0, "No ETH sent to function");
+    uint tokenReserve = token.balanceOf(address(this));
     (uint ammAmount, uint totalETH) = handleEthToTokens(
       msg.value,
       recipient,
-      ethReserve,
-      true,
+      tokenReserve,
+      false,
       currentFloorPrice
     );
 
@@ -211,7 +211,7 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
     }
 
     // AMM Transfers
-    token.transfer(msg.sender, tokenAmount);
+    token.transfer(recipient, tokenAmount);
     return totalETH;
   }
 
@@ -385,12 +385,12 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
     uint reserveAtFloor = ethOrToken ? getEthReserveAtRate(
       floorPrice
     ) : getTokenReserveAtRate(floorPrice);
-    uint assetsTillFloor = ethOrToken ? reserveAtFloor.sub(
+    uint assetsTillFloor =  ethOrToken ? reserveAtFloor.sub(
       reserve
     ) : reserve.sub(reserveAtFloor);
     uint fpoReturn;
     uint fpoRemainder;
-
+    
     // AMM Check - short circuit
     if (assetsTillFloor >= amount) {
       return (amount, 0);
@@ -398,7 +398,7 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
     // Run through FPO
     ammAmount = assetsTillFloor;
     // We use a help function here to send the exact amount of tokens
-    //TODO:CHANGE FROM HERE
+   
     (fpoReturn, fpoRemainder) = ethOrToken ? FPOExchange.ethToTokenInput(
       amount - ammAmount,
       floorPrice
@@ -423,7 +423,7 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
 
     } else {
       // recursion :_(
-      (uint additionAMM, uint additionFPO) = handleTokensToEth(
+      (uint additionAMM, uint additionFPO) = handleEthToTokens(
         fpoRemainder,
         recipient,
         reserveAtFloor,
@@ -467,7 +467,7 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
     uint remainder,
     uint cielPrice
   ) private view returns(uint ammAmount) {
-    ( , uint tokenReserve) = getCurrentReserveInfo();
+    (, uint tokenReserve) = getCurrentReserveInfo();
     uint tokenReserveAtCiel = getTokenReserveAtRate(cielPrice);
     if (remainder <= tokenReserve.sub(tokenReserveAtCiel)) {
       // If AMM seals the deal then hooray
