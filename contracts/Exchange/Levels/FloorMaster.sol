@@ -82,6 +82,22 @@ contract FloorMaster {
   }
 
   /**
+  @notice Cancels an order and refund tokens to the order placer
+  @param tokensToCancel Nmber of withdraw tokens to burn
+   */
+  function cancelOrder(uint tokensToCancel) external {
+    require(
+      tokensToCancel <= withdrawTokens[msg.sender],
+      "not enough withdrawl tokens"
+    );
+    uint tokensToWithdraw = tokensToCancel.mul(rate).div(RATE_DECIMALS);
+    require(tokensToWithdraw <= token.balanceOf(address(this)), "Not enough tokens in level");
+    withdrawTokens[msg.sender] -= tokensToCancel;
+
+    token.transfer(msg.sender, tokensToWithdraw);
+  }
+
+  /**
   @notice Withdraw on behalf of someone that has approved you
   @param ethToWithdraw Amount of eth to withdraw
   @param recipient recipient of the withdrawl

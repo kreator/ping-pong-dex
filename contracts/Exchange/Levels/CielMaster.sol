@@ -106,6 +106,22 @@ contract CielMaster {
   }
 
   /**
+  @notice Cancels an order and refund eth to the order placer
+  @param tokensToCancel Nmber of withdraw tokens to burn
+   */
+  function cancelOrder(uint tokensToCancel) external {
+    require(
+      tokensToCancel <= withdrawTokens[msg.sender],
+      "not enough withdrawl tokens"
+    );
+    uint ethToWithdraw = tokensToCancel.mul(RATE_DECIMALS).div(rate);
+    require(ethToWithdraw <= address(this).balance, "Not enough eth in level");
+    withdrawTokens[msg.sender] -= tokensToCancel;
+
+    msg.sender.transfer(ethToWithdraw);
+  }
+
+  /**
   @notice Withdraw on behalf of someone that has approved you
   @param tokenToWithdraw Amount of eth to withdraw
   @param recipient recipient of the withdrawl
