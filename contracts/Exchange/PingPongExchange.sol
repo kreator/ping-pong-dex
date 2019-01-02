@@ -35,18 +35,20 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
   /**
     @notice This function converts tokens to eth by taking an amount of tokens the sender wishes to sell
     It goes through a recursive function so gas price goes up with very large orders.
-    @param tokenAmount Amount of tokens to sell
+    @param rawTokenAmount Amount of tokens to sell before fee is taken
     @param minReturn minimum amount of eth that has to be returned from the swap
     @param deadline time limit on the transaction
     @param recipient address to recive the eth
     @return Eth purchased
    */
   function tokenToEthInput(
-    uint tokenAmount,
+    uint rawTokenAmount,
     uint minReturn,
     uint deadline,
     address payable recipient
   ) external deadlineGuard(deadline) returns(uint) {
+    // Take out the ping pong fee
+    uint tokenAmount = rawTokenAmount.mul(PPM_MAX - swapFee).div(PPM_MAX);
     // Start running the recursive handling function
     uint tokenReserve = token.balanceOf(address(this));
     (uint ammAmount, uint totalETH) = handleTokensToEth(
@@ -113,11 +115,13 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
     uint ammTokens = AMMExchange.tokenToEthOutput(ammAmount);
 
     // Validate total eth requirement
-    totalTokens += ammTokens;
+    totalTokens = totalTokens.add(ammTokens);
+    uint feeAmount = totalTokens.mul(PPM_MAX).div(PPM_MAX-swapFee);
+    totalTokens = totalTokens.add(feeAmount);
     require(totalTokens <= maxTokens, "Too much tokens required to swap");
 
     // AMM Transfers
-    token.transferFrom(msg.sender, address(this), ammTokens);
+    token.transferFrom(msg.sender, address(this), ammTokens.add(feeAmount));
     recipient.transfer(ammAmount);
     return totalTokens;
   }
@@ -137,9 +141,10 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
   ) external payable deadlineGuard(deadline) returns(uint tokensBought) {
     // Start running the recursive handling function
     require(msg.value > 0);
+    uint ethAmount = msg.value.mul(PPM_MAX - swapFee).div(PPM_MAX);
     uint ethReserve = address(this).balance;
     (uint ammAmount, uint totalTokens) = handleEthToTokens(
-      msg.value,
+      ethAmount,
       recipient,
       ethReserve,
       true,
@@ -204,7 +209,9 @@ contract PingPongExchange is BasicExchange, AMMExchange, FPOExchange {
     uint ammETH = AMMExchange.ethToTokenOutput(ammAmount);
 
     // Validate total eth requirement
-    totalETH += ammETH;
+    totalETH = totalETH.add(ammETH);
+    uint fee = totalETH.mul(PPM_MAX).div(PPM_MAX - swapFee);
+    totalETH = totalETH.add(fee);
     require(totalETH <= msg.value, "Too much eth required");
     if (totalETH < msg.value) {
       msg.sender.transfer(msg.value - totalETH);
